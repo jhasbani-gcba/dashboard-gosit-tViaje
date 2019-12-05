@@ -1,5 +1,6 @@
 from helper import lectura_archivos as rf
 from helper import tiempoViaje as tv
+from map_helper import map_helper
 import plotly.graph_objs as go
 import datetime
 import dash
@@ -8,10 +9,14 @@ import dash_html_components as html
 import os
 import glob
 import pandas as pd
-from dash.dependencies import Input, Output
+from dash.dependencies import Input, Output, State
+from dash.exceptions import PreventUpdate
+
 
 csalles_dir = os.path.abspath('/Users/Joni/Documents/matriz-OD/02_identificacion-archivos/Logs-U4-campos-salles')
 pico_dir = os.path.abspath('/Users/Joni/Documents/matriz-OD/02_identificacion-archivos/Logs-U5-pico')
+mapbox_access_token = 'pk.eyJ1Ijoiamhhc2JhbmkiLCJhIjoiY2szajQ5azVsMGZhZDNua29vemttNmVqMiJ9.T6WftYf3JpP6OJ3fXfeWCw'
+LPR_coord = pd.read_csv('LPR_coordenadas.csv')
 
 if 'TT.csv' not in os.listdir(os.getcwd()):
     dias = [3, 4, 5, 6]
@@ -36,36 +41,32 @@ else:
 
 data_plot = [TT_df]
 
+
+#######################################  APPLICATION ######################################################
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 app.title = 'Proyecto GCBA'
 
 colors = {
-    'background': '#ffffff',
-    'text': '#111111'
+    'background': '#111111',
+    'text': '#7FDBFF'
 }
 
 app.layout = html.Div([
     html.Div([
         html.Div([
-            html.Div([
-                html.Label("Intervalo de tiempo para calcular "
-                           "el promedio. [min]"),
-            ], style={'position': 'relative','fontSize':'10pt'}),
-
+            html.Label("Promedio cada: [min]"),
             dcc.Input(
                         id="input-min",
                         type="number",
                         value=5,
                         placeholder="Tiempo para promedio",
-                        debounce=True
+                        debounce=True,
                     ),
-        ],style={'width': '25%','position': 'relative','left':'15px' ,'display': 'inline-block'}),
+        ],style={'width': 'auto','height':'auto','position': 'relative','bottom':'14px','fontSize':'14px','display': 'inline-block','color':colors['text']}),
         html.Div([
-            html.Div([
-                html.Label('Tipo de gráfico'),
-            ], style={'position': 'relative','top':'-7px','left':'10px','fontSize':'10pt'}),
+            html.Label('Tipo de gráfico'),
             dcc.RadioItems(
                                     id = 'grafico-opt',
                                     options=[
@@ -75,15 +76,20 @@ app.layout = html.Div([
                                     value='TT',
                                     labelStyle={'display': 'inline-block'}
                                 )
-                    ],style={'width': '20%', 'position': 'relative','left':'30px', 'display': 'inline-block'})
-    ],style = {'position': 'relative','top':'80px'}),
+                    ],style={'width': '35%','height':'auto', 'position': 'relative','left':'20px','fontSize':'14px', 'display': 'inline-block','color':colors['text']})
+    ],style = {'position': 'static','margin':'20px 0 0 0', 'width':'30%','height':'auto'}),
     html.Div([
-        dcc.Graph(
-                    id='graph-with-input',
-                )
-    ],style={'width':'75%','position': 'relative','top':'80px'})
-])
+        html.Div([
+            dcc.Graph(id='graph-with-input',),
+            ],style={'width': '70%','position':'absolute','display': 'inline-block'}),
+        html.Div([
+            dcc.Store(id='memory'),
+            dcc.Graph(id='mapa_LPR')
+            ],style = {'width': '30%','position':'relative', 'left':'897px','display': 'inline-block'})
+    ],style={'position': 'relative', 'margin': '0', 'top': '50px'}),
+],style = {'margin':'0 auto', 'width':'95%','background-color':'#111111','text-color':'#7FDBFF'})
 
+################################## CALLBACKS ########################################
 
 @app.callback(
     Output('graph-with-input', 'figure'),
@@ -109,7 +115,7 @@ def update_figure(avg_time,grafico):
         go.Scatter(x=TT_df['Hora'],
                    y=TT_df[keys[0]],
                    mode='markers',
-                   marker=dict(color='black', size=3),
+                   marker=dict(color=colors['text'], size=3),
                    text=TT_df['Patente'],
                    name=keys[0]
                    ),
@@ -142,6 +148,7 @@ def update_figure(avg_time,grafico):
                 'font': {
                     'color': colors['text']
                 },
+                'margin': {'r': 0, 't': 0},
                 'hovermode':'closest',
                 'legend': go.layout.Legend(
                     x=-0.075,
@@ -159,8 +166,140 @@ def update_figure(avg_time,grafico):
             }
         }
 
+@app.callback(
+    Output('memory','data'),
+    [Input('mapa_LPR', 'clickData')],
+    [State('memory', 'data')]
+)
+def on_click(clickData,data):
+    if clickData is None:
+        raise PreventUpdate
+
+    data = data or {'origen':{},'destino':{}}
+    if len(data['origen'])!=0 and len(data['destino'])!=0:
+        data = {}
+
+        data['origen'] = {'text': clickData['points'][0]['text'], 'lon': clickData['points'][0]['lon'],'lat': clickData['points'][0]['lat']}
+        data['destino']={}
+
+    elif len(data['origen'])==0:
+        data['origen']={'text':clickData['points'][0]['text'], 'lon':clickData['points'][0]['lon'],'lat':clickData['points'][0]['lat']}
+    elif len(data['origen']) != 0 and len(data['destino']) == 0:
+        point = {'text': clickData['points'][0]['text'], 'lon': clickData['points'][0]['lon'],'lat': clickData['points'][0]['lat']}
+        if point != data['origen']:
+            data['destino'] = point
+        else:
+            None
+
+    return data
+
+@app.callback(
+    Output('mapa_LPR', 'figure'),
+    [Input('memory','modified_timestamp')],
+    [State('memory', 'data')]
+)
+def display_route(ts,data):
+    if data is None:
+        layer = []
+        scatter_origen = []
+        scatter_destino = []
+    else:
+        if len(data['origen']) != 0 and len(data['destino']) == 0:
+            layer = []
+            scatter_origen = go.Scattermapbox(
+                lat=[data['origen']['lat']],
+                lon=[data['origen']['lon']],
+                text=[data['origen']['text']],
+                name='Origen',
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color='blue',
+                    opacity=.8,
+                )
+            )
+            scatter_destino = []
+        elif len(data['origen']) != 0 and len(data['destino']) != 0:
+            route = {}
+            route['origen_lon'] = data['origen']['lon']
+            route['origen_lat'] = data['origen']['lat']
+            route['destino_lon'] = data['destino']['lon']
+            route['destino_lat'] = data['destino']['lat']
+
+            coordinates = map_helper.mapbox_request(route,mapbox_access_token)
+            layer = map_helper.get_layer(coordinates)
+
+            scatter_origen = go.Scattermapbox(
+                lat=[data['origen']['lat']],
+                lon=[data['origen']['lon']],
+                text=[data['origen']['text']],
+                name='Origen',
+                mode='markers',
+                marker=dict(
+                    size=10,
+                    color='green',
+                    opacity=.8,
+                ),
+
+                    )
+            scatter_destino = go.Scattermapbox(
+                lat=[data['destino']['lat']],
+                lon=[data['destino']['lon']],
+                text=[data['destino']['text']],
+                mode='markers',
+                name='Destino',
+                marker=dict(
+                    size=10,
+                    color='green',
+                    opacity=.8,
+                ),
+
+            )
+
+
+    # set the geo=spatial data
+    data_scattermapbox = [go.Scattermapbox(
+                            lat=LPR_coord['Latitud'],
+                            lon=LPR_coord['Longitud'],
+                            text=LPR_coord['Interseccion'],
+                            mode='markers',
+                            name='LPR',
+                            marker=dict(
+                                size=8,
+                                color='fuchsia',
+                                opacity=.8,
+                            ),
+                        ),
+    ]
+    if scatter_origen != [] and scatter_destino == []:
+        data_scattermapbox.append(scatter_origen)
+    if scatter_origen != [] and scatter_destino != []:
+        data_scattermapbox.append(scatter_origen)
+        data_scattermapbox.append(scatter_destino)
+
+
+    # set the layout to plot
+    layout = go.Layout(autosize=True,
+                       mapbox=dict(accesstoken=mapbox_access_token,
+                                   layers=layer,
+                                   bearing=0,
+                                   pitch=0,
+                                   zoom=11,
+                                   center=dict(lat=-34.60,
+                                               lon=-58.43),
+                                   style='dark'),
+                       width=385,
+                       height=450,
+                       margin = {'l': 0, 'r': 0, 't': 0, 'b': 0},
+                       showlegend=False,
+                       hoverlabel_align='right',
+                       hovermode='closest',
+                       clickmode='event+select')
+
+    fig = dict(data=data_scattermapbox, layout=layout)
+    return fig
 
 if __name__ == '__main__':
-    app.run_server(host='10.78.162.120', port=5000, debug=False, dev_tools_ui=True, dev_tools_props_check=False)
+    app.run_server(host='10.78.163.85', port=5000, debug=True)
 
 
