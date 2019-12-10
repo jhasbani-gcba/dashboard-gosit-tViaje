@@ -1,4 +1,5 @@
 import requests
+import numpy as np
 
 def get_layer(trayecto):
     layer = [dict(sourcetype="geojson",
@@ -35,4 +36,6 @@ def mapbox_request(route, token):
     req = requests.get(url, params=params)
     route_json = req.json()
     coordinates = route_json['routes'][0]['geometry']['coordinates']
-    return coordinates
+    t_est = np.ceil(route_json['routes'][0]['duration'])
+    dist = route_json['routes'][0]['distance']
+    return [coordinates,t_est,dist]

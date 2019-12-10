@@ -1,5 +1,8 @@
 import pandas as pd
 import numpy as np
+import datetime
+from datetime import datetime, timezone, timedelta
+from cassandra.cluster import Cluster
 
 def file_to_df(filename):
 
@@ -159,3 +162,23 @@ def get_OD_dict(O_df, D_df):
             O_dict[pat] = t_origen
             D_dict[pat] = t_dest
     return O_dict, D_dict
+
+
+def make_query(source, date):
+    UTC_OFFSET = 3
+    h_0 = datetime.strptime(date + " 00:00:00", "%Y-%m-%d %H:%M:%S")
+    h_1 = datetime.strptime(date + " 23:59:59", "%Y-%m-%d %H:%M:%S")
+    h_0_conv = (h_0 + timedelta(hours=UTC_OFFSET)).strftime("%Y-%m-%d %H:%M:%S")
+    h_1_conv = (h_1 + timedelta(hours=UTC_OFFSET)).strftime("%Y-%m-%d %H:%M:%S")
+
+    select = "SELECT timestamp,plate FROM captures "
+    where = "WHERE source_id =" + "'" + source + "'" + " AND " + "timestamp  >= " + "'" + h_0_conv + "+0000' AND " + "timestamp  <= " + "'" + h_1_conv + "+0000' ALLOW FILTERING"
+
+    query = select + where
+
+    return query
+
+def utc_to_local(utc_dt):
+    return utc_dt.replace(tzinfo=timezone.utc).astimezone(tz=None)
+
+

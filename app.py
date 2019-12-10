@@ -3,14 +3,16 @@ from helper import tiempoViaje as tv
 from map_helper import map_helper
 import plotly.graph_objs as go
 import datetime
+from datetime import datetime as dt
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
 import os
-import glob
+import numpy as np
 import pandas as pd
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
+from cassandra.cluster import Cluster
 
 
 csalles_dir = os.path.abspath('/Users/Joni/Documents/matriz-OD/02_identificacion-archivos/Logs-U4-campos-salles')
@@ -18,29 +20,33 @@ pico_dir = os.path.abspath('/Users/Joni/Documents/matriz-OD/02_identificacion-ar
 mapbox_access_token = 'pk.eyJ1Ijoiamhhc2JhbmkiLCJhIjoiY2szajQ5azVsMGZhZDNua29vemttNmVqMiJ9.T6WftYf3JpP6OJ3fXfeWCw'
 LPR_coord = pd.read_csv('LPR_coordenadas.csv')
 
-if 'TT.csv' not in os.listdir(os.getcwd()):
-    dias = [3, 4, 5, 6]
 
-    for i, dia in enumerate(dias):
-        csalles_files = glob.glob(csalles_dir + '/*0' + str(dia) + '.log')
-        pico_files = glob.glob(pico_dir + '/*0' + str(dia) + '.log')
+### QUERY PARA OBTENER COORDENADAS DE LAS CAMARAS ###
+def connect_cluster():
+    cluster = Cluster(contact_points= ['192.168.120.46'], port = 19042)
+    session = cluster.connect()
+    session.set_keyspace('delivery')
 
-        print('Definiendo el sentido para el dia {}'.format(dia))
-        O, D = rf.get_OD_df(csalles_files, pico_files)
-        if i == 0:
-            print('Tiempo de viaje para el dia {}'.format(dia))
-            TT_df = tv.get_ttravel_df(O, D, 6,1500)
-        else:
-            print('Tiempo de viaje para el dia {}'.format(dia))
-            aux_tt = tv.get_ttravel_df(O, D, 6,1500)
-            TT_df = TT_df.append(aux_tt)
+    return [cluster, session]
 
-    TT_df.to_csv('TT.csv', index=False)
-else:
-    TT_df = pd.read_csv('TT.csv')
+connection = connect_cluster()
+cluster = connection[0]
+session = connection[1]
+source_query = "SELECT DISTINCT source_id FROM captures"
+results = session.execute(source_query, timeout=20.0)
+lat = []
+lon = []
+for row in results:
+    r = list(row)[0]
+    if r != '0,0' and r != '0.0,0.0':
+        coords = r.split(',')
+        lat.append(coords[0])
+        lon.append(coords[1])
 
-data_plot = [TT_df]
-
+sources = {'lat': lat, 'lon': lon}
+sources_df = pd.DataFrame(sources)
+sources_df.head()
+cluster.shutdown()
 
 #######################################  APPLICATION ######################################################
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -49,8 +55,8 @@ app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 app.title = 'Proyecto GCBA'
 
 colors = {
-    'background': '#111111',
-    'text': '#7FDBFF'
+    'background': '#ffffff',
+    'text': '#111111'
 }
 
 app.layout = html.Div([
@@ -76,7 +82,16 @@ app.layout = html.Div([
                                     value='TT',
                                     labelStyle={'display': 'inline-block'}
                                 )
-                    ],style={'width': '35%','height':'auto', 'position': 'relative','left':'20px','fontSize':'14px', 'display': 'inline-block','color':colors['text']})
+                    ],style={'width': '35%','height':'auto', 'position': 'relative','left':'20px','fontSize':'14px', 'display': 'inline-block','color':colors['text']}),
+        html.Div([
+            dcc.DatePickerSingle(
+                id='date-picker',
+                min_date_allowed=dt(2019, 10, 1),
+                max_date_allowed=dt.today(),
+                initial_visible_month=dt(2017, 8, 5),
+                date=str(dt.strftime(dt.today(), '%Y-%m-%d'))
+            )
+        ],style={'width': 'auto','height':'auto', 'position': 'relative','left':'30px','fontSize':'14px', 'display': 'inline-block','color':colors['text']})
     ],style = {'position': 'static','margin':'20px 0 0 0', 'width':'30%','height':'auto'}),
     html.Div([
         html.Div([
@@ -87,84 +102,9 @@ app.layout = html.Div([
             dcc.Graph(id='mapa_LPR')
             ],style = {'width': '30%','position':'relative', 'left':'897px','display': 'inline-block'})
     ],style={'position': 'relative', 'margin': '0', 'top': '50px'}),
-],style = {'margin':'0 auto', 'width':'95%','background-color':'#111111','text-color':'#7FDBFF'})
+],style = {'margin':'0 auto', 'width':'95%'})
 
 ################################## CALLBACKS ########################################
-
-@app.callback(
-    Output('graph-with-input', 'figure'),
-    [Input('input-min', 'value'),
-     Input('grafico-opt','value')])
-def update_figure(avg_time,grafico):
-    if grafico == 'TT':
-        keys = ['T_viaje','T_viaje_avg','T_viaje_poly']
-        avg_df = tv.get_avg_df(TT_df, avg_time,metrica = 'Tiempo')
-        poly_df = tv.get_poly_df(avg_df,metrica = 'Tiempo')
-        ytick_vals = list(range(0, max(TT_df['T_viaje'].values.tolist()), 30))
-        ytick_labels = [str(datetime.timedelta(seconds=t)) for t in range(0, max(TT_df['T_viaje'].values.tolist()), 30)]
-        y_axis_title = 'Tiempo de viaje [s] <br> </b>'
-    else:
-        keys = ['Velocidad', 'V_avg', 'V_poly']
-        avg_df = tv.get_avg_df(TT_df, avg_time, metrica = 'Velocidad')
-        poly_df = tv.get_poly_df(avg_df,metrica = 'Velocidad')
-        ytick_vals = list(range(0,70,10))
-        ytick_labels = [str(tick) for tick in ytick_vals]
-        y_axis_title = 'Velocidad media [Km/h] <br> </b>'
-
-    data_plot = [
-        go.Scatter(x=TT_df['Hora'],
-                   y=TT_df[keys[0]],
-                   mode='markers',
-                   marker=dict(color=colors['text'], size=3),
-                   text=TT_df['Patente'],
-                   name=keys[0]
-                   ),
-        go.Scatter(x=avg_df['Hora'],
-                   y=avg_df[keys[1]],
-                   mode='markers',
-                   marker=dict(color='yellow',size=5),
-                   name='Promedio cada {} min.'.format(avg_time)
-                   ),
-        go.Scatter(x=poly_df['Hora'],
-                   y=poly_df[keys[2]],
-                   mode='lines',
-                   marker=dict(color='red'),
-                   line_width=3,
-                   name='Curva de ajuste del promedio'
-                   ),
-    ]
-    return {
-            'data': data_plot,
-            'layout': {
-                'yaxis': {'title': y_axis_title,
-                          'tickmode': 'array',
-                          'tickvals': ytick_vals,
-                          'ticktext': ytick_labels,
-                          },
-                'yaxis_tickformat': '%M:%S s',
-                'xaxis': {'title': 'Fecha y hora'},
-                'plot_bgcolor': colors['background'],
-                'paper_bgcolor': colors['background'],
-                'font': {
-                    'color': colors['text']
-                },
-                'margin': {'r': 0, 't': 0},
-                'hovermode':'closest',
-                'legend': go.layout.Legend(
-                    x=-0.075,
-                    y=1.25,
-                    traceorder="normal",
-                    font=dict(
-                        family="sans-serif",
-                        size=12,
-                        color="black"
-                    ),
-                    bgcolor="White",
-                    bordercolor="Black",
-                    borderwidth=1
-                )
-            }
-        }
 
 @app.callback(
     Output('memory','data'),
@@ -179,13 +119,13 @@ def on_click(clickData,data):
     if len(data['origen'])!=0 and len(data['destino'])!=0:
         data = {}
 
-        data['origen'] = {'text': clickData['points'][0]['text'], 'lon': clickData['points'][0]['lon'],'lat': clickData['points'][0]['lat']}
+        data['origen'] = {'lon': clickData['points'][0]['lon'],'lat': clickData['points'][0]['lat']}
         data['destino']={}
 
     elif len(data['origen'])==0:
-        data['origen']={'text':clickData['points'][0]['text'], 'lon':clickData['points'][0]['lon'],'lat':clickData['points'][0]['lat']}
+        data['origen']={'lon':clickData['points'][0]['lon'],'lat':clickData['points'][0]['lat']}
     elif len(data['origen']) != 0 and len(data['destino']) == 0:
-        point = {'text': clickData['points'][0]['text'], 'lon': clickData['points'][0]['lon'],'lat': clickData['points'][0]['lat']}
+        point = {'lon': clickData['points'][0]['lon'],'lat': clickData['points'][0]['lat']}
         if point != data['origen']:
             data['destino'] = point
         else:
@@ -209,7 +149,6 @@ def display_route(ts,data):
             scatter_origen = go.Scattermapbox(
                 lat=[data['origen']['lat']],
                 lon=[data['origen']['lon']],
-                text=[data['origen']['text']],
                 name='Origen',
                 mode='markers',
                 marker=dict(
@@ -226,13 +165,12 @@ def display_route(ts,data):
             route['destino_lon'] = data['destino']['lon']
             route['destino_lat'] = data['destino']['lat']
 
-            coordinates = map_helper.mapbox_request(route,mapbox_access_token)
-            layer = map_helper.get_layer(coordinates)
+            request_data = map_helper.mapbox_request(route,mapbox_access_token)
+            layer = map_helper.get_layer(request_data[0])
 
             scatter_origen = go.Scattermapbox(
                 lat=[data['origen']['lat']],
                 lon=[data['origen']['lon']],
-                text=[data['origen']['text']],
                 name='Origen',
                 mode='markers',
                 marker=dict(
@@ -245,7 +183,6 @@ def display_route(ts,data):
             scatter_destino = go.Scattermapbox(
                 lat=[data['destino']['lat']],
                 lon=[data['destino']['lon']],
-                text=[data['destino']['text']],
                 mode='markers',
                 name='Destino',
                 marker=dict(
@@ -259,11 +196,10 @@ def display_route(ts,data):
 
     # set the geo=spatial data
     data_scattermapbox = [go.Scattermapbox(
-                            lat=LPR_coord['Latitud'],
-                            lon=LPR_coord['Longitud'],
-                            text=LPR_coord['Interseccion'],
+                            lat=sources_df['lat'],
+                            lon=sources_df['lon'],
                             mode='markers',
-                            name='LPR',
+                            name='Camaras',
                             marker=dict(
                                 size=8,
                                 color='fuchsia',
@@ -287,7 +223,7 @@ def display_route(ts,data):
                                    zoom=11,
                                    center=dict(lat=-34.60,
                                                lon=-58.43),
-                                   style='dark'),
+                                   style='open-street-map'),
                        width=385,
                        height=450,
                        margin = {'l': 0, 'r': 0, 't': 0, 'b': 0},
@@ -299,7 +235,163 @@ def display_route(ts,data):
     fig = dict(data=data_scattermapbox, layout=layout)
     return fig
 
+
+@app.callback(
+    Output('graph-with-input', 'figure'),
+    [
+        Input('input-min', 'value'),
+        Input('grafico-opt', 'value'),
+        Input('date-picker', 'date')
+    ],
+    [State('memory', 'data')]
+
+)
+def update_figure(avg_time, grafico, date, data):
+    if data is None or len(data) < 2:
+        raise PreventUpdate
+
+    if date is not None:
+        date = dt.strptime(date.split(' ')[0], '%Y-%m-%d')
+        date = dt.strftime(date, '%Y-%m-%d')
+    else:
+        raise PreventUpdate
+
+    origen_lat = data['origen']['lat']
+    origen_lon = data['origen']['lon']
+    destino_lat = data['destino']['lat']
+    destino_lon = data['destino']['lon']
+
+    route = {}
+    route['origen_lon'] = origen_lon
+    route['origen_lat'] = origen_lat
+    route['destino_lon'] = destino_lon
+    route['destino_lat'] = destino_lat
+
+    origen_source = str(origen_lat)+','+str(origen_lon)
+    destino_source = str(destino_lat) + ',' + str(destino_lon)
+
+    connection_callback = connect_cluster()
+    cluster_callback = connection_callback[0]
+    session_callback = connection_callback[1]
+
+
+    q_origen = rf.make_query(origen_source, date)
+    print('Query Origen...')
+    results_origen = session_callback.execute(q_origen, timeout=30.0)
+    print('Fin query.')
+    fechas_df = []
+    patentes_df = []
+    for row_origen in results_origen:
+        r_o = list(row_origen)
+        captura = str(rf.utc_to_local(r_o[0]).strftime("%Y-%m-%d %H:%M:%S")).split(' ')
+        fecha = captura[0] + 'T' + captura[1]
+        fechas_df.append(fecha)
+        patentes_df.append(r_o[1])
+    cluster_callback.shutdown()
+
+    data_df = list(zip(patentes_df, fechas_df))
+    df_origen = pd.DataFrame(data_df, columns=['Patente', 'Fecha']).sort_values(by=['Fecha'])
+    df_origen.drop_duplicates(subset='Fecha', keep='first', inplace=True)
+
+    connection_callback = connect_cluster()
+    cluster_callback = connection_callback[0]
+    session_callback = connection_callback[1]
+    print('Query destino...')
+    q_destino = rf.make_query(destino_source, date)
+    results_destino = session_callback.execute(q_destino, timeout=30.0)
+    print('Fin query.')
+    fechas_df = []
+    patentes_df = []
+    for row in results_destino:
+        r = list(row)
+        captura = str(rf.utc_to_local(r[0]).strftime("%Y-%m-%d %H:%M:%S")).split(' ')
+        fecha = captura[0] + 'T' + captura[1]
+        fechas_df.append(fecha)
+        patentes_df.append(r[1])
+    cluster_callback.shutdown()
+    data_df = list(zip(patentes_df, fechas_df))
+    df_destino = pd.DataFrame(data_df, columns=['Patente', 'Fecha']).sort_values(by=['Fecha'])
+    df_destino.drop_duplicates(subset='Fecha', keep='first', inplace=True)
+    print('Dataframe armado.')
+
+    request_data = map_helper.mapbox_request(route, mapbox_access_token)
+    print(np.ceil(request_data[1] / 60))
+    df_origen = rf.filtrar_patentes(df_origen, int(np.ceil(request_data[1]/60)))
+    df_destino = rf.filtrar_patentes(df_destino,int(np.ceil(request_data[1]/60)))
+
+    TT_df = tv.get_ttravel_df(df_origen, df_destino, int(np.ceil(request_data[1]/60)), request_data[2])
+
+    if grafico == 'TT':
+        keys = ['T_viaje', 'T_viaje_avg', 'T_viaje_poly']
+        avg_df = tv.get_avg_df(TT_df, avg_time, metrica='Tiempo')
+        poly_df = tv.get_poly_df(avg_df, metrica='Tiempo')
+        ytick_vals = list(range(0, max(TT_df['T_viaje'].values.tolist()), 30))
+        ytick_labels = [str(datetime.timedelta(seconds=t)) for t in range(0, max(TT_df['T_viaje'].values.tolist()), 30)]
+        y_axis_title = 'Tiempo de viaje [s] <br> </b>'
+    else:
+        keys = ['Velocidad', 'V_avg', 'V_poly']
+        avg_df = tv.get_avg_df(TT_df, avg_time, metrica='Velocidad')
+        poly_df = tv.get_poly_df(avg_df, metrica='Velocidad')
+        ytick_vals = list(range(0, 70, 10))
+        ytick_labels = [str(tick) for tick in ytick_vals]
+        y_axis_title = 'Velocidad media [Km/h] <br> </b>'
+
+    data_plot = [
+        go.Scatter(x=TT_df['Hora'],
+                   y=TT_df[keys[0]],
+                   mode='markers',
+                   marker=dict(color=colors['text'], size=3),
+                   text=TT_df['Patente'],
+                   name=keys[0]
+                   ),
+        go.Scatter(x=avg_df['Hora'],
+                   y=avg_df[keys[1]],
+                   mode='markers',
+                   marker=dict(color='yellow', size=5),
+                   name='Promedio cada {} min.'.format(avg_time)
+                   ),
+        go.Scatter(x=poly_df['Hora'],
+                   y=poly_df[keys[2]],
+                   mode='lines',
+                   marker=dict(color='red'),
+                   line_width=3,
+                   name='Curva de ajuste del promedio'
+                   ),
+    ]
+    return {
+        'data': data_plot,
+        'layout': {
+            'yaxis': {'title': y_axis_title,
+                      'tickmode': 'array',
+                      'tickvals': ytick_vals,
+                      'ticktext': ytick_labels,
+                      },
+            'yaxis_tickformat': '%M:%S s',
+            'xaxis': {'title': 'Fecha y hora'},
+            'plot_bgcolor': colors['background'],
+            'paper_bgcolor': colors['background'],
+            'font': {
+                'color': colors['text']
+            },
+            'margin': {'r': 0, 't': 0},
+            'hovermode': 'closest',
+            'legend': go.layout.Legend(
+                x=-0.075,
+                y=1.25,
+                traceorder="normal",
+                font=dict(
+                    family="sans-serif",
+                    size=12,
+                    color="black"
+                ),
+                bgcolor="White",
+                bordercolor="Black",
+                borderwidth=1
+            )
+        }
+    }
+
 if __name__ == '__main__':
-    app.run_server(host='10.78.163.85', port=5000, debug=True)
+    app.run_server(host='192.168.255.219', port=5000, debug=True)
 
 
