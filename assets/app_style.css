@@ -1,0 +1,72 @@
+.app-header {
+    height: 60px;
+    line-height: 60px;
+    fontSize : 50px;
+    border-bottom: thin lightgrey solid;
+}
+
+.app-header .app-header--title {
+    font-size: 22px;
+    padding-left: 5px;
+}
+
+.opciones {
+    margin : 20px 0 0 20px;
+    position:relative;
+    display:block
+}
+
+.inputs-container {
+    position : static;
+    margin : 20px 0 0 20px;
+    left: 20px;
+    width : 50%;
+    height : auto;
+    display : flex;
+    justify-content : space-between
+  }
+
+.input-div {
+    width : auto;
+    height : auto
+    position : relative;
+    fontSize : 20px;
+    display: inline-block
+}
+
+.input-label{
+    width : auto;
+    height : auto
+    position : relative;
+    top:0%;
+    display: block
+}
+
+.input-object {
+    width : auto;
+    height : auto
+    position : relative;
+    top:100%;
+    display: block
+}
+
+.figure-container {
+    width: 95%;
+    position: relative;
+    top:100%;
+    display : flex;
+    justify-content : space-between
+}
+
+.plot {
+    width: 70%;
+    position: relative;
+    display: inline-block
+}
+
+.map {
+    width: 30%;
+    position: relative;
+    display: inline-block
+}
+

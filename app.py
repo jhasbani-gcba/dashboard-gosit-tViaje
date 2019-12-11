@@ -58,23 +58,55 @@ colors = {
     'background': '#ffffff',
     'text': '#111111'
 }
-
+# Layout del dashboard
 app.layout = html.Div([
-    html.Div([
-        html.Div([
-            html.Label("Promedio cada: [min]"),
-            dcc.Input(
-                        id="input-min",
-                        type="number",
-                        value=5,
-                        placeholder="Tiempo para promedio",
-                        debounce=True,
-                    ),
-        ],style={'width': 'auto','height':'auto','position': 'relative','bottom':'14px','fontSize':'14px','display': 'inline-block','color':colors['text']}),
-        html.Div([
-            html.Label('Tipo de gráfico'),
-            dcc.RadioItems(
-                                    id = 'grafico-opt',
+    html.Div(
+            className="app-header",
+            children=[
+                html.Div('Visualización de datos de cámaras de tránsito', className="app-header--title")
+            ]
+        ),
+    html.Div(
+            className = 'opciones',
+            children=[
+                html.H6('Opciones')
+    ]),
+    # Contenedor de los inputs
+    html.Div(
+        className='inputs-container',
+        children=[
+                html.Div(className= 'input-div',
+                    children = [
+                        html.Div(
+                            className= 'input-label',
+                            children=[
+                            html.Label("Promedio cada: [min]"),
+                        ]),
+                        html.Div(
+                            className= 'input-object',
+                            children=[
+                                dcc.Input(
+                                    id="input-min",
+                                    type="number",
+                                    value=5,
+                                    placeholder="Tiempo para promedio",
+                                    debounce=True,
+                                ),
+                        ])
+                ]),
+                html.Div(
+                    className='input-div',
+                    children=[
+                        html.Div(
+                                className= 'input-label',
+                                children=[
+                                    html.Label('Tipo de gráfico:')
+                        ]),
+                        html.Div(
+                            className='input-object',
+                            children=[
+                                dcc.RadioItems(
+                                    id='grafico-opt',
                                     options=[
                                         {'label': 'Tiempo de viaje', 'value': 'TT'},
                                         {'label': 'Velocidad', 'value': 'Vel'}
@@ -82,27 +114,45 @@ app.layout = html.Div([
                                     value='TT',
                                     labelStyle={'display': 'inline-block'}
                                 )
-                    ],style={'width': '35%','height':'auto', 'position': 'relative','left':'20px','fontSize':'14px', 'display': 'inline-block','color':colors['text']}),
-        html.Div([
-            dcc.DatePickerSingle(
-                id='date-picker',
-                min_date_allowed=dt(2019, 10, 1),
-                max_date_allowed=dt.today(),
-                initial_visible_month=dt(2017, 8, 5),
-                date=str(dt.strftime(dt.today(), '%Y-%m-%d'))
-            )
-        ],style={'width': 'auto','height':'auto', 'position': 'relative','left':'30px','fontSize':'14px', 'display': 'inline-block','color':colors['text']})
-    ],style = {'position': 'static','margin':'20px 0 0 0', 'width':'30%','height':'auto'}),
-    html.Div([
-        html.Div([
-            dcc.Graph(id='graph-with-input',),
-            ],style={'width': '70%','position':'absolute','display': 'inline-block'}),
-        html.Div([
-            dcc.Store(id='memory'),
-            dcc.Graph(id='mapa_LPR')
-            ],style = {'width': '30%','position':'relative', 'left':'897px','display': 'inline-block'})
-    ],style={'position': 'relative', 'margin': '0', 'top': '50px'}),
-],style = {'margin':'0 auto', 'width':'95%'})
+                        ])
+                ]),
+                html.Div(
+                    className='input-div',
+                    children= [
+                        html.Div(
+                            className='input-label',
+                            children=[
+                                html.Label('Selección de fecha:')
+                        ]),
+                        html.Div(
+                            className='input-object',
+                            children=[
+                                 dcc.DatePickerSingle(
+                                     id='date-picker',
+                                     min_date_allowed=dt(2019, 10, 1),
+                                     max_date_allowed=dt.today(),
+                                     initial_visible_month=dt(2017, 8, 5),
+                                     date=str(dt.strftime(dt.today(), '%Y-%m-%d'))
+                                 )
+                        ])
+                ])
+    ]),
+    html.Div(
+        className='figure-container',
+        children=[
+            html.Div(
+                className= 'plot',
+                children=[
+                            dcc.Graph(id='graph-with-input',),
+            ]),
+            html.Div(
+                className= 'map',
+                children= [
+                    dcc.Store(id='memory'),
+                    dcc.Graph(id='mapa_LPR')
+            ])
+    ])
+])
 
 ################################## CALLBACKS ########################################
 
