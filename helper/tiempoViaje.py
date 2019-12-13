@@ -71,24 +71,23 @@ def get_avg_df(df, period, metrica='Tiempo'):
     else:
         print('Error: metrica no valida')
         return
-    
-    
+
     avg.append(t_viaje[0])
-        
     for i,hora in enumerate(horas):
        
         if to < str_to_datetime(hora) < tf:
             window.append(t_viaje[i])
         else:
             if len(window)==0:
-                window.append(avg[len(avg)-1])
-            avg.append(np.array(window).mean())
+                avg.append(avg[len(avg)-1])
+            else:
+                avg.append(np.array(window).mean())
             to += intervalo
             tf += intervalo
             window = []
             if to < str_to_datetime(hora) < tf:
                 window.append(t_viaje[i])
-                
+
     window = [t_viaje[i] for i,hora in enumerate(horas) if tf-intervalo<str_to_datetime(hora)<tf]
     avg.append(np.array(window).mean())
     
@@ -96,17 +95,25 @@ def get_avg_df(df, period, metrica='Tiempo'):
     tf = np.datetime64(fecha_f+'T'+'23:59:59', dtype='M8[s]')
     hr_Tmin = np.arange(ti,tf,intervalo)
     hr_Tmin=np.append(hr_Tmin,tf)
-    #print(len(hr_Tmin),len(avg))
-    #print(avg)
+
     if metrica == 'Tiempo':
         data = {'Hora': list(hr_Tmin.astype('M8[s]').astype('str')), 'T_viaje_avg': avg}
     elif metrica == 'Velocidad':
         data = {'Hora': list(hr_Tmin.astype('M8[s]').astype('str')), 'V_avg': avg}
-    avg_df = pd.DataFrame(data)
+
+    try:
+        avg_df = pd.DataFrame(data)
+    except:
+        avg_df = pd.DataFrame({'A' : []})
+
     return avg_df
 
 
 def get_poly_df(df, metrica = 'Tiempo'):
+
+    if df.empty:
+        return
+
     x_str = df['Hora'].values.tolist()
     if metrica == 'Tiempo':
         y = df['T_viaje_avg'].values.tolist()
@@ -119,8 +126,7 @@ def get_poly_df(df, metrica = 'Tiempo'):
     
     fecha_i = df['Hora'].values.tolist()[0][0:10]
     fecha_f = df['Hora'].values.tolist()[len(df['Hora'].values.tolist())-1][0:10]
-    h_0 = np.datetime64(fecha_i+'T00:00:00',dtype = 'M8[s]').astype('int')
-    
+
     x = []
     x_fit = []
     hora_poly =[]
@@ -148,6 +154,9 @@ def get_poly_df(df, metrica = 'Tiempo'):
          data = {'Hora':hora_poly, 'T_viaje_poly':p(x)}
     elif metrica == 'Velocidad':
          data = {'Hora':hora_poly, 'V_poly':p(x)}
-    
-    poly_df = pd.DataFrame(data)
+
+    try:
+        poly_df = pd.DataFrame(data)
+    except:
+        poly_df = []
     return poly_df

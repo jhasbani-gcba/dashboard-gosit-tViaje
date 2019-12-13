@@ -1,13 +1,17 @@
 .app-header {
     height: 60px;
-    line-height: 60px;
-    fontSize : 50px;
+    line-height: 50px;
+    fontSize : 60px;
+    width = auto;
+    position: static;
     border-bottom: thin lightgrey solid;
 }
 
 .app-header .app-header--title {
-    font-size: 22px;
-    padding-left: 5px;
+    font-size: 30px;
+    position: static;
+    width: 100%;
+    text-align: center;
 }
 
 .opciones {
